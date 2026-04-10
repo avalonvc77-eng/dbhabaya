@@ -10,6 +10,8 @@ import Dashboard from "./pages/Dashboard";
 import Branches from "./pages/Branches";
 import Products from "./pages/Products";
 import StockMovements from "./pages/StockMovements";
+import Transfer from "./pages/Transfer";
+import Reports from "./pages/Reports";
 import Categories from "./pages/Categories";
 import UsersManagement from "./pages/UsersManagement";
 import NotFound from "./pages/NotFound";
@@ -44,6 +46,8 @@ const App = () => (
             <Route path="/branches" element={<ProtectedRoute><Branches /></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/stock" element={<ProtectedRoute><StockMovements /></ProtectedRoute>} />
+            <Route path="/transfer" element={<ProtectedRoute><Transfer /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute adminOnly><UsersManagement /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

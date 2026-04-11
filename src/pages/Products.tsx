@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Search, Package, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import type { Branch, Category, Product } from '@/types';
+import { ProductImageUpload } from '@/components/ProductImageUpload';
+import { ProductCSV } from '@/components/ProductCSV';
 
 export default function Products() {
   const { isAdmin, userBranchId, user } = useAuth();
@@ -24,6 +26,7 @@ export default function Products() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [productImages, setProductImages] = useState<Record<string, any[]>>({});
 
   const emptyForm = {
     name: '', category_id: '', branch_id: '', description: '',
@@ -33,14 +36,23 @@ export default function Products() {
   const [form, setForm] = useState(emptyForm);
 
   const fetchData = async () => {
-    const [pRes, bRes, cRes] = await Promise.all([
+    const [pRes, bRes, cRes, imgRes] = await Promise.all([
       supabase.from('products').select('*, branches:branch_id(name, shop_code), categories:category_id(name)').order('created_at', { ascending: false }),
       supabase.from('branches').select('*').order('name'),
       supabase.from('categories').select('*').order('name'),
+      supabase.from('product_images').select('*').order('display_order'),
     ]);
     setProducts((pRes.data as unknown as Product[]) || []);
     setBranches((bRes.data as unknown as Branch[]) || []);
     setCategories((cRes.data as unknown as Category[]) || []);
+    
+    // Group images by product
+    const imgMap: Record<string, any[]> = {};
+    (imgRes.data || []).forEach((img: any) => {
+      if (!imgMap[img.product_id]) imgMap[img.product_id] = [];
+      imgMap[img.product_id].push(img);
+    });
+    setProductImages(imgMap);
     setLoading(false);
   };
 
@@ -129,51 +141,63 @@ export default function Products() {
           <h2 className="text-2xl font-bold font-heading">প্রোডাক্ট</h2>
           <p className="text-muted-foreground">মোট {filtered.length}টি প্রোডাক্ট</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditProduct(null); setForm(emptyForm); } }}>
-          <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" />নতুন প্রোডাক্ট</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="font-heading">{editProduct ? 'প্রোডাক্ট আপডেট' : 'নতুন প্রোডাক্ট যুক্ত করুন'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div><Label>প্রোডাক্টের নাম</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>ক্যাটেগরি</Label>
-                  <Select value={form.category_id} onValueChange={v => setForm({ ...form, category_id: v })}>
-                    <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
-                    <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {isAdmin && (
+        <div className="flex gap-2 flex-wrap">
+          <ProductCSV products={filtered} onImport={fetchData} />
+          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditProduct(null); setForm(emptyForm); } }}>
+            <DialogTrigger asChild>
+              <Button><Plus className="w-4 h-4 mr-2" />নতুন প্রোডাক্ট</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-heading">{editProduct ? 'প্রোডাক্ট আপডেট' : 'নতুন প্রোডাক্ট যুক্ত করুন'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div><Label>প্রোডাক্টের নাম</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>শাখা</Label>
-                    <Select value={form.branch_id} onValueChange={v => setForm({ ...form, branch_id: v })}>
+                    <Label>ক্যাটেগরি</Label>
+                    <Select value={form.category_id} onValueChange={v => setForm({ ...form, category_id: v })}>
                       <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
-                      <SelectContent>{branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  {isAdmin && (
+                    <div>
+                      <Label>শাখা</Label>
+                      <Select value={form.branch_id} onValueChange={v => setForm({ ...form, branch_id: v })}>
+                        <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
+                        <SelectContent>{branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                <div><Label>বিবরণ</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label>ক্রয়মূল্য (৳)</Label><Input type="number" value={form.buy_price} onChange={e => setForm({ ...form, buy_price: e.target.value })} /></div>
+                  <div><Label>বিক্রয়মূল্য (৳)</Label><Input type="number" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label>পরিমাণ</Label><Input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} /></div>
+                  <div><Label>ন্যূনতম স্টক</Label><Input type="number" value={form.min_stock} onChange={e => setForm({ ...form, min_stock: e.target.value })} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label>সাইজ</Label><Input value={form.size} onChange={e => setForm({ ...form, size: e.target.value })} placeholder="S, M, L, XL" /></div>
+                  <div><Label>রঙ</Label><Input value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
+                </div>
+
+                {/* Image upload for edit mode */}
+                {editProduct && (
+                  <div>
+                    <Label>ছবি</Label>
+                    <ProductImageUpload productId={editProduct.id} images={productImages[editProduct.id] || []} onImagesChange={fetchData} />
+                  </div>
                 )}
-              </div>
-              <div><Label>বিবরণ</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>ক্রয়মূল্য (৳)</Label><Input type="number" value={form.buy_price} onChange={e => setForm({ ...form, buy_price: e.target.value })} /></div>
-                <div><Label>বিক্রয়মূল্য (৳)</Label><Input type="number" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>পরিমাণ</Label><Input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} /></div>
-                <div><Label>ন্যূনতম স্টক</Label><Input type="number" value={form.min_stock} onChange={e => setForm({ ...form, min_stock: e.target.value })} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>সাইজ</Label><Input value={form.size} onChange={e => setForm({ ...form, size: e.target.value })} placeholder="S, M, L, XL" /></div>
-                <div><Label>রঙ</Label><Input value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
-              </div>
-              <Button type="submit" className="w-full">{editProduct ? 'আপডেট করুন' : 'যুক্ত করুন'}</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+
+                <Button type="submit" className="w-full">{editProduct ? 'আপডেট করুন' : 'যুক্ত করুন'}</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
@@ -205,6 +229,7 @@ export default function Products() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>ছবি</TableHead>
                   <TableHead>কোড</TableHead>
                   <TableHead>নাম</TableHead>
                   <TableHead>ক্যাটেগরি</TableHead>
@@ -219,13 +244,18 @@ export default function Products() {
               <TableBody>
                 {filtered.map(p => (
                   <TableRow key={p.id}>
+                    <TableCell>
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} className="w-10 h-10 rounded object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-muted flex items-center justify-center"><Package className="w-4 h-4 text-muted-foreground" /></div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-sm text-primary font-medium">{p.product_code}</TableCell>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>{(p as any).categories?.name || '-'}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="text-xs">
-                        {(p as any).branches?.name || '-'}
-                      </Badge>
+                      <Badge variant="secondary" className="text-xs">{(p as any).branches?.name || '-'}</Badge>
                     </TableCell>
                     <TableCell className="text-right">৳{p.buy_price}</TableCell>
                     <TableCell className="text-right">৳{p.sell_price}</TableCell>

@@ -14,6 +14,7 @@ import Transfer from "./pages/Transfer";
 import Reports from "./pages/Reports";
 import Categories from "./pages/Categories";
 import UsersManagement from "./pages/UsersManagement";
+import Sales from "./pages/Sales";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/stock" element={<ProtectedRoute><StockMovements /></ProtectedRoute>} />
             <Route path="/transfer" element={<ProtectedRoute><Transfer /></ProtectedRoute>} />
+            <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute adminOnly><UsersManagement /></ProtectedRoute>} />

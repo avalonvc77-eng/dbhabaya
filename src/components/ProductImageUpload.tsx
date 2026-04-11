@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,8 +11,15 @@ interface Props {
   onImagesChange: () => void;
 }
 
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
+let cachedConfig: { cloud_name: string; upload_preset: string } | null = null;
+
+async function getCloudinaryConfig() {
+  if (cachedConfig) return cachedConfig;
+  const { data, error } = await supabase.functions.invoke('cloudinary-config');
+  if (error || !data?.cloud_name) throw new Error('Cloudinary কনফিগারেশন পাওয়া যায়নি');
+  cachedConfig = data;
+  return data;
+}
 
 export function ProductImageUpload({ productId, images, onImagesChange }: Props) {
   const [uploading, setUploading] = useState(false);
@@ -20,12 +27,13 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
   const fileRef = useRef<HTMLInputElement>(null);
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
+    const config = await getCloudinaryConfig();
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', UPLOAD_PRESET);
+    formData.append('upload_preset', config.upload_preset);
     formData.append('folder', 'dubai-borka-house');
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${config.cloud_name}/image/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -38,25 +46,16 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    if (!CLOUD_NAME || !UPLOAD_PRESET) {
-      toast.error('Cloudinary কনফিগারেশন সেট করা হয়নি');
-      return;
-    }
-
     setUploading(true);
     try {
       for (let i = 0; i < files.length; i++) {
         const url = await uploadToCloudinary(files[i]);
-        
-        // Save to product_images table
         const { error } = await supabase.from('product_images').insert({
           product_id: productId,
           image_url: url,
           display_order: images.length + i,
         });
         if (error) throw error;
-
-        // Set first image as main product image if none exists
         if (images.length === 0 && i === 0) {
           await supabase.from('products').update({ image_url: url }).eq('id', productId);
         }
@@ -71,10 +70,9 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
     }
   };
 
-  const deleteImage = async (imageId: string, imageUrl: string) => {
+  const deleteImage = async (imageId: string) => {
     const { error } = await supabase.from('product_images').delete().eq('id', imageId);
     if (error) { toast.error(error.message); return; }
-    // If deleted image was main, set next one or null
     const remaining = images.filter(i => i.id !== imageId);
     await supabase.from('products').update({ image_url: remaining[0]?.image_url || null }).eq('id', productId);
     toast.success('ছবি মুছে ফেলা হয়েছে');
@@ -96,7 +94,6 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
         )}
       </div>
 
-      {/* Thumbnails */}
       {images.length > 0 && (
         <div className="flex gap-2 mt-2 flex-wrap">
           {images.slice(0, 4).map(img => (
@@ -106,7 +103,6 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
         </div>
       )}
 
-      {/* Gallery Dialog */}
       <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>প্রোডাক্ট গ্যালারি</DialogTitle></DialogHeader>
@@ -114,7 +110,7 @@ export function ProductImageUpload({ productId, images, onImagesChange }: Props)
             {images.map(img => (
               <div key={img.id} className="relative group">
                 <img src={img.image_url} alt="" className="w-full aspect-square object-cover rounded-lg" />
-                <button onClick={() => deleteImage(img.id, img.image_url)} className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => deleteImage(img.id)} className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <X className="w-3 h-3" />
                 </button>
               </div>

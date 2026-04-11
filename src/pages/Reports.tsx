@@ -115,6 +115,12 @@ export default function Reports() {
               <SelectItem value="monthly">মাসিক</SelectItem>
             </SelectContent>
           </Select>
+          <ReportDownload data={{
+            title: `${periodLabel}_স্টক_রিপোর্ট`,
+            headers: ['শাখা', 'মোট পরিমাণ', 'মোট মূল্য (৳)'],
+            rows: branchStockData.map(b => [b.name, b.quantity, `৳${b.value.toLocaleString()}`]),
+            summary: { 'মোট স্টক ইন': totalStockInQty, 'মোট স্টক আউট': totalStockOutQty, 'মোট বিক্রয় মূল্য': `৳${totalSalesValue.toLocaleString()}` }
+          }} />
           {isAdmin && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>

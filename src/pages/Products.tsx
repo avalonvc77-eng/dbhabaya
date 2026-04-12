@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Search, Package, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import type { Branch, Category, Product } from '@/types';
-import { ProductImageUpload } from '@/components/ProductImageUpload';
+import { ProductForm } from '@/components/ProductForm';
 import { ProductCSV } from '@/components/ProductCSV';
 
 export default function Products() {
@@ -28,13 +27,6 @@ export default function Products() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [productImages, setProductImages] = useState<Record<string, any[]>>({});
 
-  const emptyForm = {
-    name: '', category_id: '', branch_id: '', description: '',
-    buy_price: '', sell_price: '', quantity: '', min_stock: '5',
-    size: '', color: '', status: 'active'
-  };
-  const [form, setForm] = useState(emptyForm);
-
   const fetchData = async () => {
     const [pRes, bRes, cRes, imgRes] = await Promise.all([
       supabase.from('products').select('*, branches:branch_id(name, shop_code), categories:category_id(name)').order('created_at', { ascending: false }),
@@ -46,7 +38,6 @@ export default function Products() {
     setBranches((bRes.data as unknown as Branch[]) || []);
     setCategories((cRes.data as unknown as Category[]) || []);
     
-    // Group images by product
     const imgMap: Record<string, any[]> = {};
     (imgRes.data || []).forEach((img: any) => {
       if (!imgMap[img.product_id]) imgMap[img.product_id] = [];
@@ -66,42 +57,37 @@ export default function Products() {
     return `${prefix}-${random}`;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFormSubmit = async (productData: any, imageUrls: string[]) => {
     if (!user) return;
-    const branchId = isAdmin ? form.branch_id : (userBranchId || '');
-    
     try {
-      const productData = {
-        name: form.name,
-        category_id: form.category_id || null,
-        branch_id: branchId,
-        description: form.description || null,
-        buy_price: parseFloat(form.buy_price) || 0,
-        sell_price: parseFloat(form.sell_price) || 0,
-        quantity: parseInt(form.quantity) || 0,
-        min_stock: parseInt(form.min_stock) || 5,
-        size: form.size || null,
-        color: form.color || null,
-        status: form.status,
-      };
-
       if (editProduct) {
         const { error } = await supabase.from('products').update(productData).eq('id', editProduct.id);
         if (error) throw error;
         toast.success('প্রোডাক্ট আপডেট হয়েছে');
       } else {
-        const { error } = await supabase.from('products').insert({
+        const { data: newProduct, error } = await supabase.from('products').insert({
           ...productData,
-          product_code: generateProductCode(branchId),
+          product_code: generateProductCode(productData.branch_id),
           created_by: user.id,
-        });
+        }).select().single();
         if (error) throw error;
+
+        // Save pending images to DB
+        if (imageUrls.length > 0 && newProduct) {
+          for (let i = 0; i < imageUrls.length; i++) {
+            await supabase.from('product_images').insert({
+              product_id: newProduct.id,
+              image_url: imageUrls[i],
+              display_order: i,
+            });
+          }
+          // Set first image as product thumbnail
+          await supabase.from('products').update({ image_url: imageUrls[0] }).eq('id', newProduct.id);
+        }
         toast.success('নতুন প্রোডাক্ট যুক্ত হয়েছে');
       }
       setDialogOpen(false);
       setEditProduct(null);
-      setForm(emptyForm);
       fetchData();
     } catch (error: any) {
       toast.error(error.message);
@@ -117,11 +103,6 @@ export default function Products() {
 
   const openEdit = (p: Product) => {
     setEditProduct(p);
-    setForm({
-      name: p.name, category_id: p.category_id || '', branch_id: p.branch_id,
-      description: p.description || '', buy_price: String(p.buy_price), sell_price: String(p.sell_price),
-      quantity: String(p.quantity), min_stock: String(p.min_stock), size: p.size || '', color: p.color || '', status: p.status
-    });
     setDialogOpen(true);
   };
 
@@ -143,7 +124,7 @@ export default function Products() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <ProductCSV products={filtered} onImport={fetchData} />
-          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditProduct(null); setForm(emptyForm); } }}>
+          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditProduct(null); } }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />নতুন প্রোডাক্ট</Button>
             </DialogTrigger>
@@ -151,50 +132,18 @@ export default function Products() {
               <DialogHeader>
                 <DialogTitle className="font-heading">{editProduct ? 'প্রোডাক্ট আপডেট' : 'নতুন প্রোডাক্ট যুক্ত করুন'}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div><Label>প্রোডাক্টের নাম</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>ক্যাটেগরি</Label>
-                    <Select value={form.category_id} onValueChange={v => setForm({ ...form, category_id: v })}>
-                      <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
-                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  {isAdmin && (
-                    <div>
-                      <Label>শাখা</Label>
-                      <Select value={form.branch_id} onValueChange={v => setForm({ ...form, branch_id: v })}>
-                        <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
-                        <SelectContent>{branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-                <div><Label>বিবরণ</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>ক্রয়মূল্য (৳)</Label><Input type="number" value={form.buy_price} onChange={e => setForm({ ...form, buy_price: e.target.value })} /></div>
-                  <div><Label>বিক্রয়মূল্য (৳)</Label><Input type="number" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>পরিমাণ</Label><Input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} /></div>
-                  <div><Label>ন্যূনতম স্টক</Label><Input type="number" value={form.min_stock} onChange={e => setForm({ ...form, min_stock: e.target.value })} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>সাইজ</Label><Input value={form.size} onChange={e => setForm({ ...form, size: e.target.value })} placeholder="S, M, L, XL" /></div>
-                  <div><Label>রঙ</Label><Input value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} /></div>
-                </div>
-
-                {/* Image upload for edit mode */}
-                {editProduct && (
-                  <div>
-                    <Label>ছবি</Label>
-                    <ProductImageUpload productId={editProduct.id} images={productImages[editProduct.id] || []} onImagesChange={fetchData} />
-                  </div>
-                )}
-
-                <Button type="submit" className="w-full">{editProduct ? 'আপডেট করুন' : 'যুক্ত করুন'}</Button>
-              </form>
+              {dialogOpen && (
+                <ProductForm
+                  isAdmin={isAdmin}
+                  userBranchId={userBranchId}
+                  branches={branches}
+                  categories={categories}
+                  editProduct={editProduct}
+                  existingImages={editProduct ? (productImages[editProduct.id] || []) : []}
+                  onSubmit={handleFormSubmit}
+                  onCancel={() => { setDialogOpen(false); setEditProduct(null); fetchData(); }}
+                />
+              )}
             </DialogContent>
           </Dialog>
         </div>

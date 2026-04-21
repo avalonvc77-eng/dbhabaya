@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Categories from "./pages/Categories";
 import UsersManagement from "./pages/UsersManagement";
 import Sales from "./pages/Sales";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Categories from "./pages/Categories";
 import UsersManagement from "./pages/UsersManagement";
 import Sales from "./pages/Sales";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute adminOnly><UsersManagement /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -58,14 +58,17 @@ export function ProductForm({ isAdmin, userBranchId, branches, categories, editP
     const config = await getCloudinaryConfig();
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', config.upload_preset);
+    formData.append('upload_preset', config.upload_preset || 'ml_default');
     formData.append('folder', 'dubai-borka-house');
 
     const res = await fetch(`https://api.cloudinary.com/v1_1/${config.cloud_name}/image/upload`, {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) throw new Error('Cloudinary আপলোড ব্যর্থ');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || 'Cloudinary আপলোড ব্যর্থ');
+    }
     const data = await res.json();
     return data.secure_url;
   };

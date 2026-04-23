@@ -41,8 +41,8 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div>
-              <h2 className="font-bold text-sidebar-foreground text-sm font-heading">দুবাই বোরকা হাউজ</h2>
-              <p className="text-xs text-sidebar-foreground/60">ইনভেন্টরি সিস্টেম</p>
+              <h2 className="font-bold text-sidebar-foreground font-heading text-base">দুবাই বোরকা হাউজ</h2>
+              <p className="text-sidebar-foreground/60 text-sm">ইনভেন্টরি সিস্টেম</p>
             </div>
           )}
         </div>
@@ -54,7 +54,7 @@ export function AppSidebar() {
               {mainItems.map(item => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url === '/'} className="hover:bg-sidebar-accent text-lg my-[10px] py-[6px] px-[6px]" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink to={item.url} end={item.url === '/'} className="hover:bg-sidebar-accent text-lg my-[4px] py-[12px] px-[12px]" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -73,7 +73,7 @@ export function AppSidebar() {
                 {adminItems.map(item => (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild>
-                      <NavLink to={item.url} className="hover:bg-sidebar-accent text-lg my-[10px] py-[6px] px-[6px]" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                      <NavLink to={item.url} className="hover:bg-sidebar-accent text-lg my-[4px] py-[12px] px-[12px]" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                         <item.icon className="mr-2 h-4 w-4" />
                         {!collapsed && <span>{item.title}</span>}
                       </NavLink>

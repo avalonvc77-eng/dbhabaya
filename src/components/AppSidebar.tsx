@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Package, ArrowLeftRight, Tags, Users, LogOut, Settings, ArrowRightLeft, FileBarChart, ShoppingCart, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Store, Package, ArrowLeftRight, Tags, Users, LogOut, Settings, ArrowRightLeft, FileBarChart, ShoppingCart, ClipboardCheck, Undo2, UserCheck } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,6 +20,8 @@ export function AppSidebar() {
     { title: 'শাখাসমূহ', url: '/branches', icon: Store },
     { title: 'প্রোডাক্ট', url: '/products', icon: Package },
     { title: 'বিক্রয়', url: '/sales', icon: ShoppingCart },
+    { title: 'বিক্রয় রিটার্ন', url: '/sales-return', icon: Undo2 },
+    { title: 'গ্রাহক', url: '/customers', icon: UserCheck },
     { title: 'স্টক মুভমেন্ট', url: '/stock', icon: ArrowLeftRight },
     { title: 'শাখা ট্রান্সফার', url: '/transfer', icon: ArrowRightLeft },
     { title: 'রিপোর্ট', url: '/reports', icon: FileBarChart },

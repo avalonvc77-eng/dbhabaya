@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Search, Package, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { ImageZoom } from '@/components/ImageZoom';
 import type { Branch, Category, Product } from '@/types';
 import { ProductForm } from '@/components/ProductForm';
 import { ProductCSV } from '@/components/ProductCSV';
@@ -195,7 +196,7 @@ export default function Products() {
                   <TableRow key={p.id}>
                     <TableCell>
                       {p.image_url ? (
-                        <img src={p.image_url} alt={p.name} className="w-10 h-10 rounded object-cover" />
+                        <ImageZoom src={p.image_url} alt={p.name} thumbnailClassName="w-10 h-10 rounded object-cover" />
                       ) : (
                         <div className="w-10 h-10 rounded bg-muted flex items-center justify-center"><Package className="w-4 h-4 text-muted-foreground" /></div>
                       )}

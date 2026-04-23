@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { User, Lock, Bell, Shield, Store, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { User, Lock, Bell, Shield, Store, Eye, EyeOff, CheckCircle, Download, Upload, RotateCcw, AlertTriangle, Database, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import type { Branch } from '@/types';
 
 export default function Settings() {
-  const { user, profile, isAdmin, roles, signOut } = useAuth();
+  const { user, profile, isAdmin, roles, signOut, session } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
 
   // Profile
@@ -36,6 +37,14 @@ export default function Settings() {
     } catch { return { lowStock: true, newTransfer: true, dailyReport: false }; }
   });
   const [notifSaving, setNotifSaving] = useState(false);
+
+  // Backup/Restore
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const restoreFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase.from('branches').select('*').order('name').then(({ data }) => {
@@ -117,6 +126,85 @@ export default function Settings() {
     }, 300);
   };
 
+  // Backup export
+  const handleBackupExport = async () => {
+    setBackupLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('data-backup', {
+        body: { action: 'export' },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'ব্যাকআপ ব্যর্থ');
+
+      const blob = new Blob([JSON.stringify(data.backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('ব্যাকআপ ফাইল ডাউনলোড হচ্ছে');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  // Backup restore
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setRestoreLoading(true);
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+
+      if (!backupData.version || !backupData.data) {
+        throw new Error('অবৈধ ব্যাকআপ ফাইল ফরম্যাট');
+      }
+
+      const { data, error } = await supabase.functions.invoke('data-backup', {
+        body: { action: 'restore', backupData },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'পুনরুদ্ধার ব্যর্থ');
+
+      toast.success(data.message);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRestoreLoading(false);
+      if (restoreFileRef.current) restoreFileRef.current.value = '';
+    }
+  };
+
+  // Factory reset
+  const handleFactoryReset = async () => {
+    if (resetConfirmText !== 'রিসেট') return;
+    setResetLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('data-backup', {
+        body: { action: 'reset' },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'রিসেট ব্যর্থ');
+
+      toast.success(data.message);
+      setResetConfirmOpen(false);
+      setResetConfirmText('');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const userRole = roles.length > 0 ? roles.map(r => r.role === 'admin' ? 'অ্যাডমিন' : 'শাখা ম্যানেজার').join(', ') : 'ব্যবহারকারী';
   const userBranch = branches.find(b => b.id === profile?.branch_id)?.name || 'নির্ধারিত নয়';
 
@@ -128,7 +216,6 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Sidebar Nav */}
         <Tabs defaultValue="profile" className="flex-1" orientation="vertical">
           <div className="flex flex-col md:flex-row gap-6">
             <Card className="md:w-64 shrink-0">
@@ -142,6 +229,9 @@ export default function Settings() {
                   </TabsTrigger>
                   <TabsTrigger value="notifications" className="w-full justify-start gap-2 px-3 py-2.5 data-[state=active]:bg-primary/10">
                     <Bell className="h-4 w-4" />নোটিফিকেশন
+                  </TabsTrigger>
+                  <TabsTrigger value="backup" className="w-full justify-start gap-2 px-3 py-2.5 data-[state=active]:bg-primary/10">
+                    <Database className="h-4 w-4" />ব্যাকআপ ও রিসেট
                   </TabsTrigger>
                   <TabsTrigger value="about" className="w-full justify-start gap-2 px-3 py-2.5 data-[state=active]:bg-primary/10">
                     <Shield className="h-4 w-4" />সম্পর্কে
@@ -187,9 +277,7 @@ export default function Settings() {
                         )}
                       </div>
                     </div>
-
                     <Separator />
-
                     <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex gap-6">
                         <div>
@@ -255,7 +343,6 @@ export default function Settings() {
                     </div>
                   </CardContent>
                 </Card>
-
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-destructive">সেশন ও অ্যাকাউন্ট</CardTitle>
@@ -309,6 +396,91 @@ export default function Settings() {
                 </Card>
               </TabsContent>
 
+              {/* Backup & Reset */}
+              <TabsContent value="backup" className="mt-0 space-y-4">
+                {!isAdmin ? (
+                  <Card>
+                    <CardContent className="py-10 text-center text-muted-foreground">
+                      <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-yellow-500" />
+                      <p className="font-medium">শুধুমাত্র অ্যাডমিন এই ফিচার ব্যবহার করতে পারেন</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    {/* Export */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Download className="h-5 w-5" />ডেটা ব্যাকআপ (এক্সপোর্ট)</CardTitle>
+                        <CardDescription>সম্পূর্ণ ডেটাবেস JSON ফাইল হিসেবে ডাউনলোড করুন — প্রোডাক্ট, বিক্রয়, গ্রাহক, স্টক মুভমেন্ট সবকিছু</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                          <p className="text-sm text-muted-foreground">ব্যাকআপে যা থাকবে:</p>
+                          <ul className="text-sm text-muted-foreground mt-1 list-disc list-inside space-y-0.5">
+                            <li>শাখা ও ক্যাটেগরি তথ্য</li>
+                            <li>সকল প্রোডাক্ট, ছবি ও ভ্যারিয়েন্ট</li>
+                            <li>বিক্রয়, রিটার্ন ও স্টক মুভমেন্ট</li>
+                            <li>গ্রাহক তথ্য</li>
+                            <li>ব্যবহারকারী প্রোফাইল ও রোল</li>
+                          </ul>
+                        </div>
+                        <Button onClick={handleBackupExport} disabled={backupLoading}>
+                          {backupLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                          {backupLoading ? 'ব্যাকআপ তৈরি হচ্ছে...' : 'ব্যাকআপ ডাউনলোড করুন'}
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Restore */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" />ডেটা পুনরুদ্ধার (রিস্টোর)</CardTitle>
+                        <CardDescription>আগের ব্যাকআপ ফাইল থেকে সম্পূর্ণ ডেটা পুনরুদ্ধার করুন</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 mb-4">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-destructive">সতর্কতা!</p>
+                              <p className="text-sm text-muted-foreground">রিস্টোর করলে বর্তমান সকল ডেটা মুছে যাবে এবং ব্যাকআপের ডেটা দিয়ে প্রতিস্থাপিত হবে। আগে ব্যাকআপ নিন।</p>
+                            </div>
+                          </div>
+                        </div>
+                        <input ref={restoreFileRef} type="file" accept=".json" className="hidden" onChange={handleRestoreFile} />
+                        <Button variant="outline" onClick={() => restoreFileRef.current?.click()} disabled={restoreLoading}>
+                          {restoreLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                          {restoreLoading ? 'পুনরুদ্ধার হচ্ছে...' : 'ব্যাকআপ ফাইল আপলোড করুন'}
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Factory Reset */}
+                    <Card className="border-destructive/50">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-destructive"><RotateCcw className="h-5 w-5" />ফ্যাক্টরি রিসেট</CardTitle>
+                        <CardDescription>সকল প্রোডাক্ট, বিক্রয়, গ্রাহক ও স্টক ডেটা স্থায়ীভাবে মুছে ফেলুন</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 mb-4">
+                          <p className="text-sm text-muted-foreground">রিসেট করলে নিচের ডেটা মুছে যাবে:</p>
+                          <ul className="text-sm text-muted-foreground mt-1 list-disc list-inside space-y-0.5">
+                            <li>সকল প্রোডাক্ট, ছবি ও ভ্যারিয়েন্ট</li>
+                            <li>সকল বিক্রয় ও রিটার্ন</li>
+                            <li>সকল গ্রাহক তথ্য</li>
+                            <li>সকল স্টক মুভমেন্ট</li>
+                          </ul>
+                          <p className="text-sm font-medium text-destructive mt-2">শাখা, ক্যাটেগরি ও ব্যবহারকারী অ্যাকাউন্ট অক্ষত থাকবে।</p>
+                        </div>
+                        <Button variant="destructive" onClick={() => setResetConfirmOpen(true)}>
+                          <RotateCcw className="h-4 w-4 mr-2" />ফ্যাক্টরি রিসেট করুন
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </TabsContent>
+
               {/* About */}
               <TabsContent value="about" className="mt-0 space-y-4">
                 <Card>
@@ -343,8 +515,11 @@ export default function Settings() {
                         <li>শাখা-থেকে-শাখা প্রোডাক্ট ট্রান্সফার ও রিভার্স</li>
                         <li>স্টক রিকনসিলিয়েশন / অডিট</li>
                         <li>বিক্রয় ও ইনভয়েস ব্যবস্থাপনা</li>
+                        <li>বিক্রয় রিটার্ন ও রিফান্ড</li>
+                        <li>গ্রাহক ডাটাবেস</li>
                         <li>স্টক মুভমেন্ট ট্র্যাকিং</li>
                         <li>রিপোর্ট ও বিশ্লেষণ</li>
+                        <li>ডেটা ব্যাকআপ, পুনরুদ্ধার ও রিসেট</li>
                         <li>ব্যবহারকারী ভূমিকা ভিত্তিক অ্যাক্সেস কন্ট্রোল</li>
                         <li>CSV ইমপোর্ট/এক্সপোর্ট</li>
                       </ul>
@@ -356,6 +531,40 @@ export default function Settings() {
           </div>
         </Tabs>
       </div>
+
+      {/* Reset Confirmation Dialog */}
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />ফ্যাক্টরি রিসেট নিশ্চিত করুন
+            </DialogTitle>
+            <DialogDescription>
+              এই কাজটি অপরিবর্তনীয়। সকল প্রোডাক্ট, বিক্রয়, গ্রাহক ও স্টক ডেটা স্থায়ীভাবে মুছে যাবে।
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm">নিশ্চিত করতে নিচে <span className="font-bold text-destructive">রিসেট</span> লিখুন:</p>
+            <Input
+              value={resetConfirmText}
+              onChange={e => setResetConfirmText(e.target.value)}
+              placeholder="রিসেট"
+              className="border-destructive/50"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetConfirmOpen(false); setResetConfirmText(''); }}>বাতিল</Button>
+            <Button
+              variant="destructive"
+              onClick={handleFactoryReset}
+              disabled={resetConfirmText !== 'রিসেট' || resetLoading}
+            >
+              {resetLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+              {resetLoading ? 'রিসেট হচ্ছে...' : 'স্থায়ীভাবে মুছুন'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

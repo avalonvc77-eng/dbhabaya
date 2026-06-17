@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Package, ArrowLeftRight, Tags, Users, LogOut, Settings, ArrowRightLeft, FileBarChart, ShoppingCart, ClipboardCheck, Undo2, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Store, Package, ArrowLeftRight, Tags, Users, LogOut, Settings, ArrowRightLeft, FileBarChart, ShoppingCart, ClipboardCheck, Undo2, UserCheck, ShieldCheck } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,6 +31,7 @@ export function AppSidebar() {
 
   const adminItems = [
     { title: 'ব্যবহারকারী', url: '/users', icon: Users },
+    { title: 'অডিট লগ', url: '/audit-logs', icon: ShieldCheck },
     { title: 'সেটিংস', url: '/settings', icon: Settings },
   ];
 

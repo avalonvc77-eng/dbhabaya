@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { Plus, ShoppingCart, Trash2, Eye, Printer } from 'lucide-react';
 import type { Branch, Product } from '@/types';
 import { format } from 'date-fns';
+import { saleSchema, firstZodError } from '@/lib/validation';
+import { escapeHtml } from '@/lib/escape';
 
 interface CartItem {
   product_id: string;
@@ -58,9 +60,10 @@ export default function Sales() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const branchProducts = isAdmin
-    ? products
-    : products.filter(p => p.branch_id === userBranchId);
+  const branchProducts = useMemo(
+    () => (isAdmin ? products : products.filter(p => p.branch_id === userBranchId)),
+    [isAdmin, products, userBranchId]
+  );
 
   const addToCart = () => {
     const p = branchProducts.find(pr => pr.id === selectedProduct);
@@ -84,68 +87,51 @@ export default function Sales() {
   const total = subtotal - discountAmount;
 
   const handleSubmit = async () => {
-    if (!user || cart.length === 0 || !customerName.trim()) {
-      toast.error('গ্রাহকের নাম ও কমপক্ষে একটি প্রোডাক্ট যুক্ত করুন');
+    if (!user) return;
+    // Client-side validation
+    const parsed = saleSchema.safeParse({
+      customer_name: customerName,
+      customer_mobile: customerMobile,
+      payment_method: paymentMethod,
+      discount_percent: discountPercent,
+      notes,
+      cart,
+    });
+    if (!parsed.success) {
+      toast.error(firstZodError(parsed.error));
       return;
     }
+
+    const branchId = isAdmin
+      ? (cart[0] ? products.find(p => p.id === cart[0].product_id)?.branch_id : userBranchId)
+      : userBranchId;
+    if (!branchId) { toast.error('শাখা নির্ধারণ করা যায়নি'); return; }
+
     setSubmitting(true);
     try {
-      const branchId = isAdmin ? (cart[0] ? products.find(p => p.id === cart[0].product_id)?.branch_id : userBranchId) : userBranchId;
-      if (!branchId) throw new Error('শাখা নির্ধারণ করা যায়নি');
-
-      // Generate invoice number via RPC
-      const { data: invoiceNum, error: invErr } = await supabase.rpc('generate_invoice_number', { p_branch_id: branchId });
-      if (invErr) throw invErr;
-
-      const { data: sale, error: saleErr } = await supabase.from('sales').insert({
-        invoice_number: invoiceNum,
-        branch_id: branchId,
-        customer_name: customerName.trim(),
-        customer_mobile: customerMobile.trim() || null,
-        subtotal,
-        discount_percent: discPct,
-        discount_amount: discountAmount,
-        total_amount: total,
-        payment_method: paymentMethod,
-        notes: notes.trim() || null,
-        created_by: user.id,
-      }).select().single();
-      if (saleErr) throw saleErr;
-
-      // Insert sale items
-      const items = cart.map(c => ({
-        sale_id: sale.id,
-        product_id: c.product_id,
-        product_name: c.product_name,
-        quantity: c.quantity,
-        unit_price: c.unit_price,
-        total_price: c.quantity * c.unit_price,
-      }));
-      const { error: itemsErr } = await supabase.from('sale_items').insert(items);
-      if (itemsErr) throw itemsErr;
-
-      // Update product quantities & record stock out
-      for (const c of cart) {
-        const p = products.find(pr => pr.id === c.product_id);
-        if (p) {
-          await supabase.from('products').update({ quantity: p.quantity - c.quantity }).eq('id', p.id);
-          await supabase.from('stock_movements').insert({
-            product_id: c.product_id,
-            branch_id: branchId,
-            movement_type: 'out',
-            quantity: c.quantity,
-            notes: `বিক্রয় - ইনভয়েস: ${invoiceNum}`,
-            created_by: user.id,
-          });
-        }
-      }
-
-      toast.success(`বিক্রয় সম্পন্ন! ইনভয়েস: ${invoiceNum}`);
+      // Atomic transactional RPC — handles stock lock, sale, items, stock_movements
+      const { data, error } = await supabase.rpc('create_sale', {
+        p_branch_id: branchId,
+        p_customer_name: parsed.data.customer_name,
+        p_customer_mobile: parsed.data.customer_mobile || null,
+        p_payment_method: parsed.data.payment_method,
+        p_discount_percent: parsed.data.discount_percent,
+        p_notes: parsed.data.notes || null,
+        p_items: cart.map(c => ({
+          product_id: c.product_id,
+          product_name: c.product_name,
+          quantity: c.quantity,
+          unit_price: c.unit_price,
+        })),
+      });
+      if (error) throw error;
+      const result = data as { invoice_number: string };
+      toast.success(`বিক্রয় সম্পন্ন! ইনভয়েস: ${result.invoice_number}`);
       setDialogOpen(false);
       resetForm();
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || 'বিক্রয় সম্পন্ন হয়নি');
     } finally {
       setSubmitting(false);
     }
@@ -165,7 +151,12 @@ export default function Sales() {
     const printWindow = window.open('', '_blank');
     if (!printWindow || !invoiceDialog) return;
     const items = invoiceDialog.items || [];
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ইনভয়েস ${invoiceDialog.invoice_number}</title>
+    const e = escapeHtml; // local alias
+    const paymentLabel =
+      invoiceDialog.payment_method === 'cash' ? 'নগদ'
+      : invoiceDialog.payment_method === 'bkash' ? 'বিকাশ'
+      : invoiceDialog.payment_method === 'nagad' ? 'নগদ (ডিজিটাল)' : 'কার্ড';
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ইনভয়েস ${e(invoiceDialog.invoice_number)}</title>
     <style>body{font-family:Arial,sans-serif;padding:20px;max-width:400px;margin:0 auto}
     h2{text-align:center;margin-bottom:5px}p{margin:2px 0;font-size:13px}
     table{width:100%;border-collapse:collapse;margin:10px 0}
@@ -176,27 +167,32 @@ export default function Sales() {
     <h2>দুবাই বোরকা হাউজ</h2>
     <p style="text-align:center">ইনভয়েস</p>
     <div class="divider"></div>
-    <p><strong>ইনভয়েস নং:</strong> ${invoiceDialog.invoice_number}</p>
-    <p><strong>তারিখ:</strong> ${format(new Date(invoiceDialog.created_at), 'dd/MM/yyyy hh:mm a')}</p>
-    <p><strong>গ্রাহক:</strong> ${invoiceDialog.customer_name}</p>
-    ${invoiceDialog.customer_mobile ? `<p><strong>মোবাইল:</strong> ${invoiceDialog.customer_mobile}</p>` : ''}
-    <p><strong>পেমেন্ট:</strong> ${invoiceDialog.payment_method === 'cash' ? 'নগদ' : invoiceDialog.payment_method === 'bkash' ? 'বিকাশ' : invoiceDialog.payment_method === 'nagad' ? 'নগদ (ডিজিটাল)' : 'কার্ড'}</p>
+    <p><strong>ইনভয়েস নং:</strong> ${e(invoiceDialog.invoice_number)}</p>
+    <p><strong>তারিখ:</strong> ${e(format(new Date(invoiceDialog.created_at), 'dd/MM/yyyy hh:mm a'))}</p>
+    <p><strong>গ্রাহক:</strong> ${e(invoiceDialog.customer_name)}</p>
+    ${invoiceDialog.customer_mobile ? `<p><strong>মোবাইল:</strong> ${e(invoiceDialog.customer_mobile)}</p>` : ''}
+    <p><strong>পেমেন্ট:</strong> ${e(paymentLabel)}</p>
     <table><thead><tr><th>প্রোডাক্ট</th><th class="right">পরিমাণ</th><th class="right">দর</th><th class="right">মোট</th></tr></thead><tbody>
-    ${items.map((i: any) => `<tr><td>${i.product_name}</td><td class="right">${i.quantity}</td><td class="right">৳${i.unit_price}</td><td class="right">৳${i.total_price}</td></tr>`).join('')}
+    ${items.map((i: any) => `<tr><td>${e(i.product_name)}</td><td class="right">${e(i.quantity)}</td><td class="right">৳${e(i.unit_price)}</td><td class="right">৳${e(i.total_price)}</td></tr>`).join('')}
     </tbody></table>
     <div class="divider"></div>
-    <p class="right">সাবটোটাল: ৳${invoiceDialog.subtotal}</p>
-    ${invoiceDialog.discount_amount > 0 ? `<p class="right">ডিসকাউন্ট (${invoiceDialog.discount_percent}%): -৳${invoiceDialog.discount_amount}</p>` : ''}
-    <p class="right total">মোট: ৳${invoiceDialog.total_amount}</p>
+    <p class="right">সাবটোটাল: ৳${e(invoiceDialog.subtotal)}</p>
+    ${invoiceDialog.discount_amount > 0 ? `<p class="right">ডিসকাউন্ট (${e(invoiceDialog.discount_percent)}%): -৳${e(invoiceDialog.discount_amount)}</p>` : ''}
+    <p class="right total">মোট: ৳${e(invoiceDialog.total_amount)}</p>
     <div class="divider"></div>
     <p style="text-align:center;font-size:11px;margin-top:20px">ধন্যবাদ! আবার আসবেন।</p>
     </body></html>`;
     printWindow.document.write(html);
     printWindow.document.close();
+    printWindow.focus();
     printWindow.print();
+    setTimeout(() => printWindow.close(), 500);
   };
 
-  const filteredSales = filterBranch === 'all' ? sales : sales.filter(s => s.branch_id === filterBranch);
+  const filteredSales = useMemo(
+    () => (filterBranch === 'all' ? sales : sales.filter(s => s.branch_id === filterBranch)),
+    [sales, filterBranch]
+  );
 
   if (loading) return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground">লোড হচ্ছে...</p></div>;
 

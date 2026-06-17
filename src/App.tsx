@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Branches from "./pages/Branches";
@@ -28,7 +29,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   if (loading) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">লোড হচ্ছে...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/" replace />;
-  return <AppLayout>{children}</AppLayout>;
+  return <AppLayout><ErrorBoundary>{children}</ErrorBoundary></AppLayout>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {

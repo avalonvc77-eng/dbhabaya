@@ -1,14 +1,17 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
-Allow: /
+Allow: /$
+Allow: /login
+Disallow: /branches
+Disallow: /products
+Disallow: /stock
+Disallow: /stock-audit
+Disallow: /transfer
+Disallow: /sales
+Disallow: /sales-return
+Disallow: /customers
+Disallow: /reports
+Disallow: /categories
+Disallow: /users
+Disallow: /settings
+
+Sitemap: https://dbhabaya.lovable.app/sitemap.xml

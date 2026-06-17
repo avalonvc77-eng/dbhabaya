@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { ShoppingBag } from 'lucide-react';
+import { SEO } from '@/components/common/SEO';
 
 export default function Login() {
   const { signIn, signUp } = useAuth();

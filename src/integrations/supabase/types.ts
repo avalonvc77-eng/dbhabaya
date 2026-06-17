@@ -567,6 +567,30 @@ export type Database = {
           },
         ]
       }
+      schema_versions: {
+        Row: {
+          applied_at: string
+          id: string
+          name: string
+          notes: string | null
+          version: string
+        }
+        Insert: {
+          applied_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          version: string
+        }
+        Update: {
+          applied_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          version?: string
+        }
+        Relationships: []
+      }
       stock_movements: {
         Row: {
           branch_id: string
@@ -638,6 +662,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_branch: { Args: { p_branch_id: string }; Returns: undefined }
       create_sale: {
         Args: {
           p_branch_id: string
@@ -666,6 +691,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_access_denied: {
+        Args: { p_action: string; p_details?: Json; p_table_name: string }
+        Returns: undefined
       }
     }
     Enums: {

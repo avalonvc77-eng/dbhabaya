@@ -36,6 +36,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <SEO
+        title="লগইন"
+        description="DBH Inventory অ্যাকাউন্টে লগইন করুন — মাল্টি-ব্রাঞ্চ ইনভেন্টরি ও পয়েন্ট অফ সেল ম্যানেজমেন্ট সিস্টেম।"
+        path="/login"
+      />
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">

@@ -17,7 +17,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <SidebarTrigger className="mr-4" />
             <h1 className="text-lg font-semibold font-heading text-foreground">দুবাই বোরকা হাউজ</h1>
           </header>
-          <main className="flex-1 p-6 overflow-auto">
+          <main id="main-content" className="flex-1 p-6 overflow-auto">
             {children}
           </main>
         </div>

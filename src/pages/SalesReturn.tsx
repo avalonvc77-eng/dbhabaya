@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Plus, Search, Undo2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Branch } from '@/types';
+import { salesReturnSchema, firstZodError } from '@/lib/validation';
 
 interface ReturnItem {
   product_id: string;
@@ -88,55 +89,31 @@ export default function SalesReturn() {
   const totalRefund = returnItems.reduce((s, r) => s + r.quantity * r.unit_price, 0);
 
   const handleSubmit = async () => {
-    if (!user || !selectedSale || returnItems.length === 0) {
-      toast.error('রিটার্ন আইটেম নির্বাচন করুন');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const { data: returnNum } = await supabase.rpc('generate_return_number', { p_branch_id: selectedSale.branch_id });
-
-      const { data: returnRecord, error: retErr } = await supabase.from('sales_returns').insert({
-        sale_id: selectedSale.id,
-        branch_id: selectedSale.branch_id,
-        return_number: returnNum,
-        customer_name: selectedSale.customer_name,
-        customer_mobile: selectedSale.customer_mobile,
-        total_refund: totalRefund,
-        reason: reason.trim() || null,
-        created_by: user.id,
-      }).select().single();
-      if (retErr) throw retErr;
-
-      // Insert return items
-      const items = returnItems.map(r => ({
-        return_id: returnRecord.id,
+    if (!user || !selectedSale) return;
+    const parsed = salesReturnSchema.safeParse({
+      sale_id: selectedSale.id,
+      reason,
+      items: returnItems.map(r => ({
         product_id: r.product_id,
         product_name: r.product_name,
         quantity: r.quantity,
         unit_price: r.unit_price,
-        total_price: r.quantity * r.unit_price,
-      }));
-      const { error: itemsErr } = await supabase.from('sales_return_items').insert(items);
-      if (itemsErr) throw itemsErr;
-
-      // Restore stock for returned items
-      for (const r of returnItems) {
-        const { data: product } = await supabase.from('products').select('quantity').eq('id', r.product_id).single();
-        if (product) {
-          await supabase.from('products').update({ quantity: product.quantity + r.quantity }).eq('id', r.product_id);
-          await supabase.from('stock_movements').insert({
-            product_id: r.product_id,
-            branch_id: selectedSale.branch_id,
-            movement_type: 'in',
-            quantity: r.quantity,
-            notes: `রিটার্ন - ${returnNum} (ইনভয়েস: ${selectedSale.invoice_number})`,
-            created_by: user.id,
-          });
-        }
-      }
-
-      toast.success(`রিটার্ন সম্পন্ন! রিটার্ন নং: ${returnNum}`);
+      })),
+    });
+    if (!parsed.success) {
+      toast.error(firstZodError(parsed.error));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.rpc('create_sales_return', {
+        p_sale_id: parsed.data.sale_id,
+        p_reason: parsed.data.reason || null,
+        p_items: parsed.data.items,
+      });
+      if (error) throw error;
+      const result = data as { return_number: string };
+      toast.success(`রিটার্ন সম্পন্ন! রিটার্ন নং: ${result.return_number}`);
       setDialogOpen(false);
       setSelectedSale(null);
       setSaleItems([]);
@@ -145,7 +122,7 @@ export default function SalesReturn() {
       setInvoiceSearch('');
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || 'রিটার্ন সম্পন্ন হয়নি');
     } finally {
       setSubmitting(false);
     }
@@ -157,13 +134,13 @@ export default function SalesReturn() {
     setDetailItems(data || []);
   };
 
-  const filteredReturns = returns.filter(r => {
+  const filteredReturns = useMemo(() => returns.filter(r => {
     const matchSearch = !searchTerm ||
       r.return_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.customer_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchBranch = filterBranch === 'all' || r.branch_id === filterBranch;
     return matchSearch && matchBranch;
-  });
+  }), [returns, searchTerm, filterBranch]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground">লোড হচ্ছে...</p></div>;
 

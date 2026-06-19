@@ -96,7 +96,7 @@ export default function AuditLogs() {
       <Card>
         <CardHeader><CardTitle className="text-base">পলিসি / মাইগ্রেশন ভার্সন</CardTitle></CardHeader>
         <CardContent>
-          {loading ? <LoadingState /> : versions.length === 0 ? <EmptyState title="কোনো ভার্সন নেই" /> : (
+          {loading ? <LoadingState /> : versions.length === 0 ? <EmptyState icon={Inbox} message="কোনো ভার্সন নেই" /> : (
             <Table>
               <TableHeader>
                 <TableRow>

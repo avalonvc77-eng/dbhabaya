@@ -50,9 +50,21 @@ export function SalesForm({ products, isAdmin, userBranchId, onSuccess }: Props)
       return;
     }
 
-    const branchId = isAdmin
-      ? (cart[0] ? products.find(p => p.id === cart[0].product_id)?.branch_id : userBranchId)
-      : userBranchId;
+    // Determine branch for the sale. Admins may select products from any
+    // branch but a single sale must stay within ONE branch — otherwise
+    // create_sale would decrement stock and write movements under the wrong
+    // branch. Reject mixed-branch carts here.
+    let branchId: string | null = userBranchId;
+    if (isAdmin) {
+      const cartBranches = new Set(
+        cart.map(c => products.find(p => p.id === c.product_id)?.branch_id).filter(Boolean) as string[]
+      );
+      if (cartBranches.size > 1) {
+        toast.error('একটি বিক্রয়ে শুধুমাত্র একই শাখার প্রোডাক্ট রাখা যাবে');
+        return;
+      }
+      branchId = [...cartBranches][0] ?? userBranchId;
+    }
     if (!branchId) { toast.error('শাখা নির্ধারণ করা যায়নি'); return; }
 
     setSubmitting(true);

@@ -42,7 +42,7 @@ export default function AuditLogs() {
     (async () => {
       const [logsRes, vRes] = await Promise.all([
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(200),
-        (supabase as any).from('schema_versions').select('*').order('applied_at', { ascending: false }),
+        supabase.from('schema_versions').select('*').order('applied_at', { ascending: false }),
       ]);
       if (logsRes.data) setLogs(logsRes.data as AuditLog[]);
       if (vRes.data) setVersions(vRes.data as SchemaVersion[]);

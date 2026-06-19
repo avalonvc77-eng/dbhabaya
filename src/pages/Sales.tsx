@@ -14,8 +14,7 @@ import { InvoiceDialog } from '@/components/sales/InvoiceDialog';
 import type { InvoicePayload } from '@/components/sales/printInvoice';
 
 export default function Sales() {
-  const { isAdmin } = useAuth();
-  const { userBranchId } = useAuth();
+  const { isAdmin, userBranchId } = useAuth();
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);

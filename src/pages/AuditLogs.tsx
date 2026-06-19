@@ -56,7 +56,7 @@ export default function AuditLogs() {
   const denials = logs.filter(l => l.action.startsWith('ACCESS_DENIED'));
 
   const renderTable = (rows: AuditLog[]) => (
-    rows.length === 0 ? <EmptyState title="কোনো রেকর্ড নেই" /> : (
+    rows.length === 0 ? <EmptyState icon={Inbox} message="কোনো রেকর্ড নেই" /> : (
       <Table>
         <TableHeader>
           <TableRow>

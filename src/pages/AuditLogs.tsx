@@ -42,7 +42,7 @@ export default function AuditLogs() {
     (async () => {
       const [logsRes, vRes] = await Promise.all([
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(200),
-        (supabase as any).from('schema_versions').select('*').order('applied_at', { ascending: false }),
+        supabase.from('schema_versions').select('*').order('applied_at', { ascending: false }),
       ]);
       if (logsRes.data) setLogs(logsRes.data as AuditLog[]);
       if (vRes.data) setVersions(vRes.data as SchemaVersion[]);
@@ -56,7 +56,7 @@ export default function AuditLogs() {
   const denials = logs.filter(l => l.action.startsWith('ACCESS_DENIED'));
 
   const renderTable = (rows: AuditLog[]) => (
-    rows.length === 0 ? <EmptyState title="কোনো রেকর্ড নেই" /> : (
+    rows.length === 0 ? <EmptyState icon={Inbox} message="কোনো রেকর্ড নেই" /> : (
       <Table>
         <TableHeader>
           <TableRow>
@@ -96,7 +96,7 @@ export default function AuditLogs() {
       <Card>
         <CardHeader><CardTitle className="text-base">পলিসি / মাইগ্রেশন ভার্সন</CardTitle></CardHeader>
         <CardContent>
-          {loading ? <LoadingState /> : versions.length === 0 ? <EmptyState title="কোনো ভার্সন নেই" /> : (
+          {loading ? <LoadingState /> : versions.length === 0 ? <EmptyState icon={Inbox} message="কোনো ভার্সন নেই" /> : (
             <Table>
               <TableHeader>
                 <TableRow>

@@ -36,30 +36,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let mounted = true;
+
+    // Subscribe first to avoid missing events. Defer the async fetch out of
+    // the auth callback (Supabase warns against awaiting inside it), but only
+    // flip `loading` to false AFTER profile + roles are loaded so guards like
+    // `adminOnly` and the branch-onboarding dialog never see stale defaults.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        if (!mounted) return;
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          setTimeout(() => fetchUserData(session.user.id), 0);
+          setLoading(true);
+          setTimeout(() => {
+            fetchUserData(session.user.id).finally(() => {
+              if (mounted) setLoading(false);
+            });
+          }, 0);
         } else {
           setProfile(null);
           setRoles([]);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserData(session.user.id);
+        await fetchUserData(session.user.id);
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
   const isAdmin = roles.some(r => r.role === 'admin');
